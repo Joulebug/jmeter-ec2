@@ -481,6 +481,7 @@ function runsetup() {
   # edit any 'stringProp filename=' references to use $REMOTE_DIR in place of whatever local path was being used
   # we assume that the required dat file is copied into the local /data directory
   filepaths=$(awk 'BEGIN { FS = ">" } ; /<stringProp name=\"filename\">[^<]*<\/stringProp>/ {print $2}' $working_jmx | cut -d'<' -f1) # pull out filepath
+
   i=1
   while read filepath ; do
     if [ -n "$filepath" ] ; then # this entry is not blank
@@ -503,6 +504,31 @@ function runsetup() {
     # increment i
     i=$((i+1))
   done <<<"$filepaths"
+  
+  filenamepaths=$(awk 'BEGIN { FS = ">" } ; /<stringProp name=\"File.path\">[^<]*<\/stringProp>/ {print $2}' $working_jmx | cut -d'<' -f1) # pull out filepath
+
+  j=1
+  while read filenamepath ; do
+    if [ -n "$filenamepath" ] ; then # this entry is not blank
+      # extract the filename from the filepath using '/' separator
+      filename=$( echo $filenamepath | awk -F"/" '{print $NF}' )
+      endresult="$REMOTE_HOME"/data/"$filename"
+      if [[ $filepath =~ .*\$.* ]] ; then
+        echo "The path $filenamepath contains a $ char, this currently fails the awk sub command."
+        echo "You'll have to remove these from all filepaths. Sorry."
+        echo
+        echo "Script exiting"
+        exit
+      fi
+      awk '/<stringProp name=\"File.path\">[^<]*<\/stringProp>/{c++;if(c=='"$j"') \
+                             {sub("File.path\">'"$filenamepath"'<","File.path\">'"$endresult"'<")}}1'  \
+                             $working_jmx > $temp_jmx
+      rm $working_jmx
+      mv $temp_jmx $working_jmx
+    fi
+    # increment i
+    j=$((j+1))
+  done <<<"$filenamepaths"
 
   # now we use the same working file to edit thread counts
   # to cope with the problem of trying to spread 10 threads over 3 hosts (10/3 has a remainder) the script creates a unique jmx for each host
